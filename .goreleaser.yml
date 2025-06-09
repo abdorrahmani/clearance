@@ -16,7 +16,7 @@ builds:
     ignore:
       - goos: windows
         goarch: 386
-    main: ./main.go
+    main: .
     binary: clearance.exe
     dir: .
 
