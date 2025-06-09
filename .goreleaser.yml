@@ -1,0 +1,68 @@
+version: 2
+project_name: clearance
+
+before:
+  hooks:
+    - go mod tidy
+
+builds:
+  - id: clearance
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - windows
+    goarch:
+      - amd64
+    ignore:
+      - goos: windows
+        goarch: 386
+    main: ./main.go
+    binary: clearance.exe
+    dir: .
+
+archives:
+  - format: zip
+    name_template: >-
+      {{ .ProjectName }}_
+      {{- title .Os }}_
+      {{- if eq .Arch "amd64" }}x86_64
+      {{- else if eq .Arch "386" }}i386
+      {{- else }}{{ .Arch }}{{ end }}
+    format_overrides:
+      - goos: windows
+        format: zip
+    files:
+      - LICENSE
+      - README.md
+      - run-clearance.bat
+
+changelog:
+  use: git
+  sort: asc
+  filters:
+    exclude:
+      - '^docs:'
+      - '^test:'
+      - '^ci:'
+      - Merge pull request
+      - Merge branch
+
+snapshot:
+  name_template: "{{ incpatch .Version }}-next"
+
+release:
+  github:
+    owner: abdorrahmani
+    name: clearance
+  draft: false
+  prerelease: false
+  name_template: "{{ .ProjectName }} v{{ .Version }}"
+  extra_files:
+    - glob: LICENSE
+    - glob: README.md
+    - glob: run-clearance.bat
+  footer: |
+  
+    ## Support
+
+    If you need help, please visit [anophel.com/en/contact-us](https://anophel.com/en/contact-us) 
