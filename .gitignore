@@ -42,5 +42,4 @@ debug
 debug.test
 
 # Project specific
-clearance.exe
-run-clearance.bat 
+clearance.exe 
