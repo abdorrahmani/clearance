@@ -8,8 +8,14 @@ import (
 	"runtime"
 	"strings"
 
+	"github.com/gookit/color"
 	"github.com/spf13/cobra"
 )
+
+const clearanceLogo = `
+  C L E A R A N C E
+  =================
+`
 
 var (
 	cleanNPM    bool
@@ -17,6 +23,9 @@ var (
 	cleanDocker bool
 	cleanWinSxS bool
 	cleanAll    bool
+	version     = "0.1.0"
+	commit      = "none"
+	date        = "2025-06-09"
 )
 
 var rootCmd = &cobra.Command{
@@ -89,24 +98,35 @@ func init() {
 	rootCmd.Flags().BoolVar(&cleanAll, "all", false, "Clean all caches")
 }
 
+func showVersion() {
+	fmt.Printf("\nClearance v%s\n", version)
+	fmt.Printf("Build: %s (%s)\n", commit, date)
+	fmt.Printf("OS/Arch: %s/%s\n\n", runtime.GOOS, runtime.GOARCH)
+}
+
 func showAdminWarning() {
-	fmt.Println("⚠️  This tool requires administrator privileges to clean system caches.")
-	fmt.Println("Please run this tool as administrator.")
-	fmt.Println("\nPress Enter to exit...")
+	color.Red.Print("\n🔒 Administrator Privileges Required 🔒\n")
+	color.Red.Println("========================================")
+	color.Yellow.Println("⚠️  This tool requires administrator privileges to clean system caches.")
+	color.Yellow.Println("Please run this tool as administrator.")
+	color.Yellow.Println("\nPress Enter to exit...")
 	bufio.NewReader(os.Stdin).ReadBytes('\n')
 	os.Exit(1)
 }
 
 func showMenu() {
-	fmt.Println("\n🧹 Clearance - Cache Cleanup Tool")
-	fmt.Println("================================")
-	fmt.Println("1. Clean npm cache")
-	fmt.Println("2. Clean yarn cache")
-	fmt.Println("3. Clean Docker cache")
-	fmt.Println("4. Clean WinSxS temp files")
-	fmt.Println("5. Clean everything")
-	fmt.Println("6. Exit")
-	fmt.Print("\nSelect an option (1-6): ")
+	color.Blue.Print(clearanceLogo)
+	color.Blue.Println("         Clearance - Cache Cleanup Tool")
+	color.Blue.Println("=========================================")
+	color.Bold.Println("\n📁 Available Options:")
+	color.Green.Println("1. Clean npm cache")
+	color.Green.Println("2. Clean yarn cache")
+	color.Green.Println("3. Clean Docker cache")
+	color.Green.Println("4. Clean WinSxS temp files")
+	color.Green.Println("5. Clean everything")
+	color.Green.Println("6. Exit")
+	color.Green.Println("7. Show version")
+	color.Bold.Print("\n→ Please enter your choice (1-7): ")
 }
 
 func runCleanup(option string) error {
@@ -145,11 +165,11 @@ func runCleanup(option string) error {
 	}
 
 	if len(errors) > 0 {
-		fmt.Printf("\n⚠️  Cleanup completed with %d error(s). Some operations may have failed.\n", len(errors))
+		color.Yellow.Printf("\n⚠️  Cleanup completed with %d error(s). Some operations may have failed.\n", len(errors))
 		return fmt.Errorf("some cleanup operations failed")
 	}
 
-	fmt.Println("\n✅ Cleanup finished successfully!")
+	color.Green.Println("\n✅ Cleanup finished successfully!")
 	return nil
 }
 
@@ -159,12 +179,17 @@ func main() {
 		showAdminWarning()
 	}
 
-	// If running from PowerShell, keep the window open
+	// If running from PowerShell, set up the environment
 	if runtime.GOOS == "windows" {
-		cmd := exec.Command("powershell", "-NoExit", "-Command", "& { $host.UI.RawUI.WindowTitle = 'Clearance - Cache Cleanup Tool' }")
+		// Set VirtualTerminalLevel for ANSI color support
+		cmd := exec.Command("powershell", "-NoExit", "-Command",
+			"Set-ItemProperty -Path 'HKCU:\\Console' -Name 'VirtualTerminalLevel' -Value 1; "+
+				"$host.UI.RawUI.WindowTitle = 'Clearance - Cache Cleanup Tool'")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		cmd.Start()
+		if err := cmd.Start(); err != nil {
+			fmt.Printf("Warning: Could not set up PowerShell environment: %v\n", err)
+		}
 	}
 
 	for {
@@ -176,16 +201,20 @@ func main() {
 		switch option {
 		case "1", "2", "3", "4", "5":
 			if err := runCleanup(option); err != nil {
-				fmt.Printf("[error] %v\n", err)
+				color.Red.Printf("[error] %v\n", err)
 			}
-			fmt.Println("\nPress Enter to continue...")
+			color.Yellow.Println("\nPress Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')
 		case "6":
-			fmt.Println("\n👋 Thank you for using Clearance!")
+			color.Blue.Println("\n👋 Thank you for using Clearance!")
 			os.Exit(0)
+		case "7":
+			showVersion()
+			color.Yellow.Println("Press Enter to continue...")
+			bufio.NewReader(os.Stdin).ReadBytes('\n')
 		default:
-			fmt.Println("\n❌ Invalid option. Please try again.")
-			fmt.Println("Press Enter to continue...")
+			color.Red.Println("\n❌ Invalid option. Please try again.")
+			color.Yellow.Println("Press Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')
 		}
 	}
