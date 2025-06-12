@@ -18,15 +18,17 @@ const clearanceLogo = `
 `
 
 var (
-	cleanNPM    bool
-	cleanYarn   bool
-	cleanDocker bool
-	cleanWinSxS bool
-	cleanAll    bool
-	reportSize  bool
-	version     = "0.1.0"
-	commit      = "none"
-	date        = "2025-06-09"
+	cleanNPM           bool
+	cleanYarn          bool
+	cleanDocker        bool
+	cleanWinSxS        bool
+	cleanWindowsTemp   bool
+	cleanWindowsChunks bool
+	cleanAll           bool
+	reportSize         bool
+	version            = "0.1.0"
+	commit             = "none"
+	date               = "2025-06-09"
 )
 
 var rootCmd = &cobra.Command{
@@ -96,6 +98,8 @@ func init() {
 	rootCmd.Flags().BoolVar(&cleanYarn, "yarn", false, "Clean yarn cache")
 	rootCmd.Flags().BoolVar(&cleanDocker, "docker", false, "Clean Docker cache")
 	rootCmd.Flags().BoolVar(&cleanWinSxS, "winsxs", false, "Clean WinSxS temp files")
+	rootCmd.Flags().BoolVar(&cleanWindowsTemp, "wintemp", false, "Clean Windows temporary files")
+	rootCmd.Flags().BoolVar(&cleanWindowsChunks, "winchunks", false, "Clean Windows error reporting chunks")
 	rootCmd.Flags().BoolVar(&cleanAll, "all", false, "Clean all caches")
 	rootCmd.Flags().BoolVar(&reportSize, "report", false, "Report cache sizes")
 }
@@ -125,11 +129,13 @@ func showMenu() {
 	color.Green.Println("2. Clean yarn cache")
 	color.Green.Println("3. Clean Docker cache")
 	color.Green.Println("4. Clean WinSxS temp files")
-	color.Green.Println("5. Clean everything")
-	color.Green.Println("6. Report cache sizes")
-	color.Green.Println("7. Exit")
-	color.Green.Println("8. Show version")
-	color.Bold.Print("\n→ Please enter your choice (1-8): ")
+	color.Green.Println("5. Clean Windows temp files")
+	color.Green.Println("6. Clean Windows error chunks")
+	color.Green.Println("7. Clean everything")
+	color.Green.Println("8. Report cache sizes")
+	color.Green.Println("9. Exit")
+	color.Green.Println("10. Show version")
+	color.Bold.Print("\n→ Please enter your choice (1-10): ")
 }
 
 func runCleanup(option string) error {
@@ -153,6 +159,14 @@ func runCleanup(option string) error {
 			errors = append(errors, err)
 		}
 	case "5":
+		if err := cleanupWindowsTemp(); err != nil {
+			errors = append(errors, err)
+		}
+	case "6":
+		if err := cleanupWindowsChunks(); err != nil {
+			errors = append(errors, err)
+		}
+	case "7":
 		if err := cleanNPMCache(); err != nil {
 			errors = append(errors, err)
 		}
@@ -163,6 +177,12 @@ func runCleanup(option string) error {
 			errors = append(errors, err)
 		}
 		if err := cleanWinSxSTemp(); err != nil {
+			errors = append(errors, err)
+		}
+		if err := cleanupWindowsTemp(); err != nil {
+			errors = append(errors, err)
+		}
+		if err := cleanupWindowsChunks(); err != nil {
 			errors = append(errors, err)
 		}
 	}
@@ -202,22 +222,22 @@ func main() {
 		option = strings.TrimSpace(option)
 
 		switch option {
-		case "1", "2", "3", "4", "5":
+		case "1", "2", "3", "4", "5", "6", "7":
 			if err := runCleanup(option); err != nil {
 				color.Red.Printf("[error] %v\n", err)
 			}
 			color.Yellow.Println("\nPress Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')
-		case "6":
+		case "8":
 			if err := reportCacheSizes(); err != nil {
 				color.Red.Printf("[error] %v\n", err)
 			}
 			color.Yellow.Println("\nPress Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')
-		case "7":
+		case "9":
 			color.Blue.Println("\n👋 Thank you for using Clearance!")
 			os.Exit(0)
-		case "8":
+		case "10":
 			showVersion()
 			color.Yellow.Println("Press Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')

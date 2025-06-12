@@ -326,6 +326,132 @@ func getWindowsChunkSize() (string, error) {
 	return formatSize(size), nil
 }
 
+// cleanupWindowsTemp cleans Windows temporary files
+func cleanupWindowsTemp() error {
+	fmt.Println("[wintemp] Attempting to clean Windows temporary files...")
+	if runtime.GOOS != "windows" {
+		fmt.Println("[wintemp] Windows temp cleanup is only available on Windows.")
+		return fmt.Errorf("windows temp cleanup is only available on Windows")
+	}
+
+	tempDir := os.TempDir()
+	entries, err := os.ReadDir(tempDir)
+	if err != nil {
+		return fmt.Errorf("failed to read temp directory: %w", err)
+	}
+
+	var total, failed int
+	for _, entry := range entries {
+		total++
+		path := filepath.Join(tempDir, entry.Name())
+
+		// Skip if the file is currently in use
+		if file, err := os.OpenFile(path, os.O_RDWR, 0); err == nil {
+			file.Close()
+			err := os.RemoveAll(path)
+			if err != nil {
+				if os.IsPermission(err) {
+					fmt.Printf("[wintemp] Access denied for: %s (File might be in use)\n", path)
+				} else {
+					fmt.Printf("[wintemp] Failed to remove: %s (%v)\n", path, err)
+				}
+				failed++
+			} else {
+				fmt.Printf("[wintemp] Successfully removed: %s\n", path)
+			}
+		} else {
+			fmt.Printf("[wintemp] Skipping in-use file: %s\n", path)
+			failed++
+		}
+	}
+
+	if failed == 0 {
+		fmt.Println("[wintemp] Windows temp folder cleaned successfully.")
+		return nil
+	}
+
+	if failed < total {
+		fmt.Printf("[wintemp] Partial cleanup complete. %d of %d items removed successfully.\n", total-failed, total)
+		fmt.Println("[wintemp] Some files could not be deleted as they are currently in use.")
+		return nil
+	}
+
+	return fmt.Errorf("failed to clean any files in Windows temp folder")
+}
+
+// cleanupWindowsChunks cleans Windows error reporting chunks
+func cleanupWindowsChunks() error {
+	fmt.Println("[winchunks] Attempting to clean Windows error reporting chunks...")
+	if runtime.GOOS != "windows" {
+		fmt.Println("[winchunks] Windows chunks cleanup is only available on Windows.")
+		return fmt.Errorf("windows chunks cleanup is only available on Windows")
+	}
+
+	chunkDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "Windows", "WER", "ReportQueue")
+	if _, err := os.Stat(chunkDir); os.IsNotExist(err) {
+		fmt.Println("[winchunks] ReportQueue directory not found.")
+		return nil
+	}
+
+	// First try: PowerShell command with elevated privileges
+	fmt.Println("[winchunks] Attempting to clean using PowerShell...")
+	psCmd := exec.Command("powershell", "-Command", `
+		$ErrorActionPreference = 'Stop'
+		$chunkDir = Join-Path $env:LOCALAPPDATA "Microsoft\Windows\WER\ReportQueue"
+		if (Test-Path $chunkDir) {
+			try {
+				Get-ChildItem -Path $chunkDir -Recurse | Remove-Item -Force -Recurse -ErrorAction Stop
+				Write-Host "[winchunks] Successfully cleaned ReportQueue"
+			} catch {
+				Write-Host "[winchunks] Warning: Could not clean ReportQueue - $($_.Exception.Message)"
+			}
+		}
+	`)
+	psCmd.Stdout = os.Stdout
+	psCmd.Stderr = os.Stderr
+	if err := psCmd.Run(); err != nil {
+		fmt.Printf("[winchunks] PowerShell cleanup encountered issues: %v\n", err)
+	}
+
+	// Second try: Manual cleanup
+	fmt.Println("[winchunks] Attempting manual cleanup...")
+	entries, err := os.ReadDir(chunkDir)
+	if err != nil {
+		return fmt.Errorf("failed to read ReportQueue directory: %w", err)
+	}
+
+	var total, failed int
+	for _, entry := range entries {
+		total++
+		path := filepath.Join(chunkDir, entry.Name())
+
+		err := os.RemoveAll(path)
+		if err != nil {
+			if os.IsPermission(err) {
+				fmt.Printf("[winchunks] Access denied for: %s (This is normal for system-protected files)\n", path)
+			} else {
+				fmt.Printf("[winchunks] Failed to remove: %s (%v)\n", path, err)
+			}
+			failed++
+		} else {
+			fmt.Printf("[winchunks] Successfully removed: %s\n", path)
+		}
+	}
+
+	if failed == 0 {
+		fmt.Println("[winchunks] Windows chunks cleaned successfully.")
+		return nil
+	}
+
+	if failed < total {
+		fmt.Printf("[winchunks] Partial cleanup complete. %d of %d items removed successfully.\n", total-failed, total)
+		fmt.Println("[winchunks] Some files could not be deleted due to system protection.")
+		return nil
+	}
+
+	return fmt.Errorf("failed to clean any files in Windows chunks folder")
+}
+
 // reportCacheSizes displays the size of all caches
 func reportCacheSizes() error {
 	color.Blue.Println("\n📊 Cache Size Report")
