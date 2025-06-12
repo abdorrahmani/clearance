@@ -292,6 +292,40 @@ func getWinSxSTempSize() (string, error) {
 	return formatSize(size), nil
 }
 
+// getWindowsTempSize returns the size of Windows temporary files
+func getWindowsTempSize() (string, error) {
+	if runtime.GOOS != "windows" {
+		return "N/A", nil
+	}
+
+	tempDir := os.TempDir()
+	if _, err := os.Stat(tempDir); os.IsNotExist(err) {
+		return "Not found", nil
+	}
+	size, err := getDirSize(tempDir)
+	if err != nil {
+		return "Error", err
+	}
+	return formatSize(size), nil
+}
+
+// getWindowsChunkSize returns the size of Windows chunk files
+func getWindowsChunkSize() (string, error) {
+	if runtime.GOOS != "windows" {
+		return "N/A", nil
+	}
+
+	chunkDir := filepath.Join(os.Getenv("LOCALAPPDATA"), "Microsoft", "Windows", "WER", "ReportQueue")
+	if _, err := os.Stat(chunkDir); os.IsNotExist(err) {
+		return "Not found", nil
+	}
+	size, err := getDirSize(chunkDir)
+	if err != nil {
+		return "Error", err
+	}
+	return formatSize(size), nil
+}
+
 // reportCacheSizes displays the size of all caches
 func reportCacheSizes() error {
 	color.Blue.Println("\n📊 Cache Size Report")
@@ -342,6 +376,30 @@ func reportCacheSizes() error {
 			color.Yellow.Printf("WinSxS temp: %s\n", winsxsSize)
 		} else {
 			color.Green.Printf("WinSxS temp: %s\n", winsxsSize)
+		}
+	}
+
+	// Windows Temp
+	winTempSize, err := getWindowsTempSize()
+	if err != nil {
+		color.Red.Printf("Windows temp: Error - %v\n", err)
+	} else {
+		if winTempSize == "Not found" || winTempSize == "N/A" {
+			color.Yellow.Printf("Windows temp: %s\n", winTempSize)
+		} else {
+			color.Green.Printf("Windows temp: %s\n", winTempSize)
+		}
+	}
+
+	// Windows Chunks
+	winChunkSize, err := getWindowsChunkSize()
+	if err != nil {
+		color.Red.Printf("Windows chunks: Error - %v\n", err)
+	} else {
+		if winChunkSize == "Not found" || winChunkSize == "N/A" {
+			color.Yellow.Printf("Windows chunks: %s\n", winChunkSize)
+		} else {
+			color.Green.Printf("Windows chunks: %s\n", winChunkSize)
 		}
 	}
 
