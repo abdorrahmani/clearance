@@ -128,18 +128,35 @@ func cleanWinSxSTemp() error {
 
 	winsxsTemp := filepath.Join(os.Getenv("WINDIR"), "WinSxS", "Temp")
 
-	// First try: PowerShell command with elevated privileges
+	// First try: PowerShell command with elevated privileges and better error handling
 	fmt.Println("[winsxs] Attempting to clean using PowerShell...")
-	psCmd := exec.Command("powershell", "-Command", fmt.Sprintf("Remove-Item -Recurse -Force '%s\\*' -ErrorAction SilentlyContinue", winsxsTemp))
+	psCmd := exec.Command("powershell", "-Command", `
+		$ErrorActionPreference = 'Stop'
+		$paths = @(
+			'InFlight',
+			'PendingDeletes',
+			'PendingRenames'
+		)
+		foreach ($path in $paths) {
+			$fullPath = Join-Path $env:WINDIR "WinSxS\Temp\$path"
+			if (Test-Path $fullPath) {
+				try {
+					Get-ChildItem -Path $fullPath -Recurse | Remove-Item -Force -Recurse -ErrorAction Stop
+					Write-Host "[winsxs] Successfully cleaned $path"
+				} catch {
+					Write-Host "[winsxs] Warning: Could not clean $path - $($_.Exception.Message)"
+				}
+			}
+		}
+	`)
 	psCmd.Stdout = os.Stdout
 	psCmd.Stderr = os.Stderr
-	if err := psCmd.Run(); err == nil {
-		fmt.Println("[winsxs] PowerShell cleanup completed.")
-		return nil
+	if err := psCmd.Run(); err != nil {
+		fmt.Printf("[winsxs] PowerShell cleanup encountered issues: %v\n", err)
 	}
 
-	// Second try: Manual cleanup of individual items
-	fmt.Println("[winsxs] PowerShell cleanup failed, attempting manual cleanup...")
+	// Second try: Manual cleanup with better error handling
+	fmt.Println("[winsxs] Attempting manual cleanup...")
 	entries, err := os.ReadDir(winsxsTemp)
 	if err != nil {
 		return fmt.Errorf("failed to read WinSxS Temp folder: %w", err)
@@ -149,10 +166,23 @@ func cleanWinSxSTemp() error {
 	for _, entry := range entries {
 		total++
 		path := filepath.Join(winsxsTemp, entry.Name())
+
+		// Skip system-protected folders
+		if entry.Name() == "InFlight" || entry.Name() == "PendingDeletes" || entry.Name() == "PendingRenames" {
+			fmt.Printf("[winsxs] Skipping system-protected folder: %s\n", entry.Name())
+			continue
+		}
+
 		err := os.RemoveAll(path)
 		if err != nil {
-			fmt.Printf("[winsxs] Failed to remove: %s (%v)\n", path, err)
+			if os.IsPermission(err) {
+				fmt.Printf("[winsxs] Access denied for: %s (This is normal for system-protected files)\n", path)
+			} else {
+				fmt.Printf("[winsxs] Failed to remove: %s (%v)\n", path, err)
+			}
 			failed++
+		} else {
+			fmt.Printf("[winsxs] Successfully removed: %s\n", path)
 		}
 	}
 
