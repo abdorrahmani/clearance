@@ -6,7 +6,10 @@ import (
 	"os/exec"
 	"path/filepath"
 	"runtime"
+	"strings"
 	"syscall"
+
+	"github.com/gookit/color"
 )
 
 // checkAdminPrivileges checks if the program is running with administrator privileges
@@ -165,4 +168,152 @@ func cleanWinSxSTemp() error {
 	}
 
 	return fmt.Errorf("failed to clean any files in WinSxS Temp folder")
+}
+
+// getDirSize calculates the size of a directory in bytes
+func getDirSize(path string) (int64, error) {
+	var size int64
+	err := filepath.Walk(path, func(_ string, info os.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+		if !info.IsDir() {
+			size += info.Size()
+		}
+		return nil
+	})
+	return size, err
+}
+
+// formatSize converts bytes to human-readable format
+func formatSize(size int64) string {
+	const unit = 1024
+	if size < unit {
+		return fmt.Sprintf("%d B", size)
+	}
+	div, exp := int64(unit), 0
+	for n := size / unit; n >= unit; n /= unit {
+		div *= unit
+		exp++
+	}
+	return fmt.Sprintf("%.1f %cB", float64(size)/float64(div), "KMGTPE"[exp])
+}
+
+// getNPMCacheSize returns the size of npm cache
+func getNPMCacheSize() (string, error) {
+	npmCache := filepath.Join(os.Getenv("LOCALAPPDATA"), "npm-cache")
+	if _, err := os.Stat(npmCache); os.IsNotExist(err) {
+		return "Not found", nil
+	}
+	size, err := getDirSize(npmCache)
+	if err != nil {
+		return "Error", err
+	}
+	return formatSize(size), nil
+}
+
+// getYarnCacheSize returns the size of yarn cache
+func getYarnCacheSize() (string, error) {
+	yarnCache := filepath.Join(os.Getenv("LOCALAPPDATA"), "Yarn", "Cache")
+	if _, err := os.Stat(yarnCache); os.IsNotExist(err) {
+		return "Not found", nil
+	}
+	size, err := getDirSize(yarnCache)
+	if err != nil {
+		return "Error", err
+	}
+	return formatSize(size), nil
+}
+
+// getDockerCacheSize returns the size of Docker cache
+func getDockerCacheSize() (string, error) {
+	if _, err := exec.LookPath("docker"); err != nil {
+		return "Not installed", nil
+	}
+
+	// Check if Docker daemon is running
+	cmd := exec.Command("docker", "info")
+	if err := cmd.Run(); err != nil {
+		return "Docker not running", nil
+	}
+
+	cmd = exec.Command("docker", "system", "df", "--format", "{{.Size}}")
+	output, err := cmd.Output()
+	if err != nil {
+		return "Error getting size", nil
+	}
+	return strings.TrimSpace(string(output)), nil
+}
+
+// getWinSxSTempSize returns the size of WinSxS temp folder
+func getWinSxSTempSize() (string, error) {
+	if runtime.GOOS != "windows" {
+		return "N/A", nil
+	}
+
+	winsxsTemp := filepath.Join(os.Getenv("WINDIR"), "WinSxS", "Temp")
+	if _, err := os.Stat(winsxsTemp); os.IsNotExist(err) {
+		return "Not found", nil
+	}
+	size, err := getDirSize(winsxsTemp)
+	if err != nil {
+		return "Error", err
+	}
+	return formatSize(size), nil
+}
+
+// reportCacheSizes displays the size of all caches
+func reportCacheSizes() error {
+	color.Blue.Println("\n📊 Cache Size Report")
+	color.Blue.Println("===================")
+
+	// NPM Cache
+	npmSize, err := getNPMCacheSize()
+	if err != nil {
+		color.Red.Printf("npm cache: Error - %v\n", err)
+	} else {
+		if npmSize == "Not found" {
+			color.Yellow.Printf("npm cache: %s\n", npmSize)
+		} else {
+			color.Green.Printf("npm cache: %s\n", npmSize)
+		}
+	}
+
+	// Yarn Cache
+	yarnSize, err := getYarnCacheSize()
+	if err != nil {
+		color.Red.Printf("yarn cache: Error - %v\n", err)
+	} else {
+		if yarnSize == "Not found" {
+			color.Yellow.Printf("yarn cache: %s\n", yarnSize)
+		} else {
+			color.Green.Printf("yarn cache: %s\n", yarnSize)
+		}
+	}
+
+	// Docker Cache
+	dockerSize, err := getDockerCacheSize()
+	if err != nil {
+		color.Red.Printf("docker cache: Error - %v\n", err)
+	} else {
+		if dockerSize == "Not installed" || dockerSize == "Docker not running" {
+			color.Yellow.Printf("docker cache: %s\n", dockerSize)
+		} else {
+			color.Green.Printf("docker cache: %s\n", dockerSize)
+		}
+	}
+
+	// WinSxS Temp
+	winsxsSize, err := getWinSxSTempSize()
+	if err != nil {
+		color.Red.Printf("WinSxS temp: Error - %v\n", err)
+	} else {
+		if winsxsSize == "Not found" || winsxsSize == "N/A" {
+			color.Yellow.Printf("WinSxS temp: %s\n", winsxsSize)
+		} else {
+			color.Green.Printf("WinSxS temp: %s\n", winsxsSize)
+		}
+	}
+
+	return nil
 }

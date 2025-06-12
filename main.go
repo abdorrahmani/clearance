@@ -23,6 +23,7 @@ var (
 	cleanDocker bool
 	cleanWinSxS bool
 	cleanAll    bool
+	reportSize  bool
 	version     = "0.1.0"
 	commit      = "none"
 	date        = "2025-06-09"
@@ -96,6 +97,7 @@ func init() {
 	rootCmd.Flags().BoolVar(&cleanDocker, "docker", false, "Clean Docker cache")
 	rootCmd.Flags().BoolVar(&cleanWinSxS, "winsxs", false, "Clean WinSxS temp files")
 	rootCmd.Flags().BoolVar(&cleanAll, "all", false, "Clean all caches")
+	rootCmd.Flags().BoolVar(&reportSize, "report", false, "Report cache sizes")
 }
 
 func showVersion() {
@@ -124,9 +126,10 @@ func showMenu() {
 	color.Green.Println("3. Clean Docker cache")
 	color.Green.Println("4. Clean WinSxS temp files")
 	color.Green.Println("5. Clean everything")
-	color.Green.Println("6. Exit")
-	color.Green.Println("7. Show version")
-	color.Bold.Print("\n→ Please enter your choice (1-7): ")
+	color.Green.Println("6. Report cache sizes")
+	color.Green.Println("7. Exit")
+	color.Green.Println("8. Show version")
+	color.Bold.Print("\n→ Please enter your choice (1-8): ")
 }
 
 func runCleanup(option string) error {
@@ -206,9 +209,15 @@ func main() {
 			color.Yellow.Println("\nPress Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')
 		case "6":
+			if err := reportCacheSizes(); err != nil {
+				color.Red.Printf("[error] %v\n", err)
+			}
+			color.Yellow.Println("\nPress Enter to continue...")
+			bufio.NewReader(os.Stdin).ReadBytes('\n')
+		case "7":
 			color.Blue.Println("\n👋 Thank you for using Clearance!")
 			os.Exit(0)
-		case "7":
+		case "8":
 			showVersion()
 			color.Yellow.Println("Press Enter to continue...")
 			bufio.NewReader(os.Stdin).ReadBytes('\n')
