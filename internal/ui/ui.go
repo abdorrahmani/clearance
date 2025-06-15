@@ -38,9 +38,14 @@ func (u *UI) ClearScreen() {
 
 // ShowHeader displays the application header
 func (u *UI) ShowHeader(version string) {
-	color.Blue.Println("\n╔════════════════════════════════════════════════════════════╗")
-	color.Blue.Println("║                    Clearance v" + version + "                    ║")
-	color.Blue.Println("╚════════════════════════════════════════════════════════════╝")
+	color.Blue.Println(`
+  ____ _                                     
+ / ___| | ___  __ _ _ __ __ _ _ __   ___ ___ 
+| |   | |/ _ \/ _` + "`" + ` | '__/ _` + "`" + ` | '_ \ / __/ _ \
+| |___| |  __/ (_| | | | (_| | | | | (_|  __/
+ \____|_|\___|\__,_|_|  \__,_|_| |_|\___\___|
+`)
+	color.Blue.Println("                               v" + version + " developed by Anophel.com                    ")
 }
 
 // ShowInstructions displays the usage instructions
@@ -81,7 +86,7 @@ func (u *UI) ShowMenu() {
 	}
 
 	color.Blue.Println("\n╔════════════════════════════════════════════════════════════╗")
-	color.Blue.Println("║                    Make your choice                         ║")
+	color.Blue.Println("║                    Make your choice                        ║")
 	color.Blue.Println("╚════════════════════════════════════════════════════════════╝")
 }
 
