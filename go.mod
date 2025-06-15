@@ -1,4 +1,4 @@
-module github.com/yourusername/clearance
+module github.com/abdorrahmani/clearance
 
 go 1.23.0
 

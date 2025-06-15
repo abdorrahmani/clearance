@@ -1,35 +1,90 @@
 package main
 
 import (
-	"bufio"
+	"context"
 	"fmt"
 	"os"
 	"os/exec"
 	"runtime"
 	"strings"
 
-	"github.com/gookit/color"
+	"github.com/abdorrahmani/clearance/internal/cleaner"
+	"github.com/abdorrahmani/clearance/internal/reporter"
+	"github.com/abdorrahmani/clearance/internal/ui"
+	"github.com/abdorrahmani/clearance/pkg/errors"
 	"github.com/spf13/cobra"
 )
 
-const clearanceLogo = `
-  C L E A R A N C E
-  =================
-`
-
 var (
-	cleanNPM           bool
-	cleanYarn          bool
-	cleanDocker        bool
-	cleanWinSxS        bool
-	cleanWindowsTemp   bool
-	cleanWindowsChunks bool
-	cleanAll           bool
-	reportSize         bool
-	version            = "0.1.0"
-	commit             = "none"
-	date               = "2025-06-09"
+	version = "0.1.0"
+	commit  = "none"
+	date    = "2025-06-09"
 )
+
+func executeCleanup(ui *ui.UI, options []string) error {
+	ctx := context.Background()
+
+	ui.ShowSelectedOptions(options)
+
+	// Handle cache size reporting
+	if len(options) == 1 && (options[0] == "7" || options[0] == "report") {
+		reporter := reporter.NewCacheReporter()
+		sizes := reporter.GetCacheSizes()
+		ui.ShowCacheSizeReport(sizes)
+		return nil
+	}
+
+	cleaners := []cleaner.Cleaner{}
+	for _, opt := range options {
+		switch opt {
+		case "1", "npm":
+			cleaners = append(cleaners, cleaner.NewNPMCleaner())
+		case "2", "yarn":
+			cleaners = append(cleaners, cleaner.NewYarnCleaner())
+		case "3", "docker":
+			cleaners = append(cleaners, cleaner.NewDockerCleaner())
+		case "4", "winsxs":
+			cleaners = append(cleaners, cleaner.NewWindowsCleaner("winsxs"))
+		case "5", "wintemp":
+			cleaners = append(cleaners, cleaner.NewWindowsCleaner("wintemp"))
+		case "6", "winchunks":
+			cleaners = append(cleaners, cleaner.NewWindowsCleaner("winchunks"))
+		case "7", "report":
+			reporter := reporter.NewCacheReporter()
+			sizes := reporter.GetCacheSizes()
+			ui.ShowCacheSizeReport(sizes)
+			return nil
+		case "8", "exit":
+			return nil
+		}
+	}
+
+	if len(cleaners) == 0 {
+		return errors.NewErrNotSupported("cleanup", "no valid cleanup options selected")
+	}
+
+	if err := cleaner.CheckAdminPrivileges(); err != nil {
+		ui.ShowAdminWarning()
+		return err
+	}
+
+	ui.ShowCleanupStart()
+
+	var errs []error
+	for _, c := range cleaners {
+		if err := c.Clean(ctx); err != nil {
+			ui.ShowError(err)
+			errs = append(errs, err)
+		}
+	}
+
+	ui.ShowCleanupComplete(len(errs))
+	if len(errs) > 0 {
+		return errors.NewErrCleanupFailed("all", "some cleanup operations failed")
+	}
+
+	return nil
+}
 
 var rootCmd = &cobra.Command{
 	Use:   "clearance",
@@ -37,214 +92,49 @@ var rootCmd = &cobra.Command{
 	Long: `Clearance is a CLI tool that helps free up disk space by cleaning various development caches.
 It can clean npm, yarn, Docker, and Windows system temp files.`,
 	RunE: func(cmd *cobra.Command, args []string) error {
-		if cleanAll {
-			cleanNPM = true
-			cleanYarn = true
-			cleanDocker = true
-			cleanWinSxS = true
-		}
+		ui := ui.NewUI()
 
-		if !cleanNPM && !cleanYarn && !cleanDocker && !cleanWinSxS {
-			return fmt.Errorf("no cleanup options specified. Use --help for available options")
-		}
-
-		if err := checkAdminPrivileges(); err != nil {
-			fmt.Printf("[error] %v\n", err)
-			return err
-		}
-
-		var errors []error
-
-		if cleanNPM {
-			if err := cleanNPMCache(); err != nil {
-				fmt.Printf("[error] %v\n", err)
-				errors = append(errors, err)
+		for {
+			ui.ShowMenu()
+			input := ui.ReadInput()
+			if input == "" {
+				continue
 			}
-		}
 
-		if cleanYarn {
-			if err := cleanYarnCache(); err != nil {
-				fmt.Printf("[error] %v\n", err)
-				errors = append(errors, err)
+			var options []string
+			if strings.ToLower(input) == "all" {
+				options = []string{"1", "2", "3", "4", "5", "6"}
+			} else if strings.ToLower(input) == "exit" {
+				options = []string{"8"}
+			} else {
+				options = strings.Split(input, ",")
 			}
-		}
 
-		if cleanDocker {
-			if err := cleanDockerCache(); err != nil {
-				fmt.Printf("[error] %v\n", err)
-				errors = append(errors, err)
+			if err := executeCleanup(ui, options); err != nil {
+				ui.ShowError(err)
 			}
-		}
 
-		if cleanWinSxS {
-			if err := cleanWinSxSTemp(); err != nil {
-				fmt.Printf("[error] %v\n", err)
-				errors = append(errors, err)
-			}
+			ui.WaitForEnter()
 		}
-
-		if len(errors) > 0 {
-			fmt.Printf("\n⚠️  Clearance completed with %d error(s). Some operations may have failed.\n", len(errors))
-			return fmt.Errorf("some cleanup operations failed")
-		}
-
-		fmt.Println("\n✅ Clearance finished successfully!")
-		return nil
 	},
 }
 
-func init() {
-	rootCmd.Flags().BoolVar(&cleanNPM, "npm", false, "Clean npm cache")
-	rootCmd.Flags().BoolVar(&cleanYarn, "yarn", false, "Clean yarn cache")
-	rootCmd.Flags().BoolVar(&cleanDocker, "docker", false, "Clean Docker cache")
-	rootCmd.Flags().BoolVar(&cleanWinSxS, "winsxs", false, "Clean WinSxS temp files")
-	rootCmd.Flags().BoolVar(&cleanWindowsTemp, "wintemp", false, "Clean Windows temporary files")
-	rootCmd.Flags().BoolVar(&cleanWindowsChunks, "winchunks", false, "Clean Windows error reporting chunks")
-	rootCmd.Flags().BoolVar(&cleanAll, "all", false, "Clean all caches")
-	rootCmd.Flags().BoolVar(&reportSize, "report", false, "Report cache sizes")
-}
-
-func showVersion() {
-	fmt.Printf("\nClearance v%s\n", version)
-	fmt.Printf("Build: %s (%s)\n", commit, date)
-	fmt.Printf("OS/Arch: %s/%s\n\n", runtime.GOOS, runtime.GOARCH)
-}
-
-func showAdminWarning() {
-	color.Red.Print("\n🔒 Administrator Privileges Required 🔒\n")
-	color.Red.Println("========================================")
-	color.Yellow.Println("⚠️  This tool requires administrator privileges to clean system caches.")
-	color.Yellow.Println("Please run this tool as administrator.")
-	color.Yellow.Println("\nPress Enter to exit...")
-	bufio.NewReader(os.Stdin).ReadBytes('\n')
-	os.Exit(1)
-}
-
-func showMenu() {
-	color.Blue.Print(clearanceLogo)
-	color.Blue.Println("         Clearance - Cache Cleanup Tool")
-	color.Blue.Println("=========================================")
-	color.Bold.Println("\n📁 Available Options:")
-	color.Green.Println("1. Clean npm cache")
-	color.Green.Println("2. Clean yarn cache")
-	color.Green.Println("3. Clean Docker cache")
-	color.Green.Println("4. Clean WinSxS temp files")
-	color.Green.Println("5. Clean Windows temp files")
-	color.Green.Println("6. Clean Windows error chunks")
-	color.Green.Println("7. Clean everything")
-	color.Green.Println("8. Report cache sizes")
-	color.Green.Println("9. Exit")
-	color.Green.Println("10. Show version")
-	color.Bold.Print("\n→ Please enter your choice (1-10): ")
-}
-
-func runCleanup(option string) error {
-	var errors []error
-
-	switch option {
-	case "1":
-		if err := cleanNPMCache(); err != nil {
-			errors = append(errors, err)
-		}
-	case "2":
-		if err := cleanYarnCache(); err != nil {
-			errors = append(errors, err)
-		}
-	case "3":
-		if err := cleanDockerCache(); err != nil {
-			errors = append(errors, err)
-		}
-	case "4":
-		if err := cleanWinSxSTemp(); err != nil {
-			errors = append(errors, err)
-		}
-	case "5":
-		if err := cleanupWindowsTemp(); err != nil {
-			errors = append(errors, err)
-		}
-	case "6":
-		if err := cleanupWindowsChunks(); err != nil {
-			errors = append(errors, err)
-		}
-	case "7":
-		if err := cleanNPMCache(); err != nil {
-			errors = append(errors, err)
-		}
-		if err := cleanYarnCache(); err != nil {
-			errors = append(errors, err)
-		}
-		if err := cleanDockerCache(); err != nil {
-			errors = append(errors, err)
-		}
-		if err := cleanWinSxSTemp(); err != nil {
-			errors = append(errors, err)
-		}
-		if err := cleanupWindowsTemp(); err != nil {
-			errors = append(errors, err)
-		}
-		if err := cleanupWindowsChunks(); err != nil {
-			errors = append(errors, err)
-		}
-	}
-
-	if len(errors) > 0 {
-		color.Yellow.Printf("\n⚠️  Cleanup completed with %d error(s). Some operations may have failed.\n", len(errors))
-		return fmt.Errorf("some cleanup operations failed")
-	}
-
-	color.Green.Println("\n✅ Cleanup finished successfully!")
-	return nil
-}
-
 func main() {
-	// Check for admin privileges first
-	if err := checkAdminPrivileges(); err != nil {
-		showAdminWarning()
-	}
-
 	// If running from PowerShell, set up the environment
 	if runtime.GOOS == "windows" {
 		// Set VirtualTerminalLevel for ANSI color support
-		cmd := exec.Command("powershell", "-NoExit", "-Command",
+		cmd := exec.Command("powershell", "-Command",
 			"Set-ItemProperty -Path 'HKCU:\\Console' -Name 'VirtualTerminalLevel' -Value 1; "+
 				"$host.UI.RawUI.WindowTitle = 'Clearance - Cache Cleanup Tool'")
 		cmd.Stdout = os.Stdout
 		cmd.Stderr = os.Stderr
-		if err := cmd.Start(); err != nil {
-			fmt.Printf("Warning: Could not set up PowerShell environment: %v\n", err)
+		if err := cmd.Run(); err != nil {
+			ui := ui.NewUI()
+			ui.ShowWarning(fmt.Sprintf("Could not set up PowerShell environment: %v", err))
 		}
 	}
 
-	for {
-		showMenu()
-		reader := bufio.NewReader(os.Stdin)
-		option, _ := reader.ReadString('\n')
-		option = strings.TrimSpace(option)
-
-		switch option {
-		case "1", "2", "3", "4", "5", "6", "7":
-			if err := runCleanup(option); err != nil {
-				color.Red.Printf("[error] %v\n", err)
-			}
-			color.Yellow.Println("\nPress Enter to continue...")
-			bufio.NewReader(os.Stdin).ReadBytes('\n')
-		case "8":
-			if err := reportCacheSizes(); err != nil {
-				color.Red.Printf("[error] %v\n", err)
-			}
-			color.Yellow.Println("\nPress Enter to continue...")
-			bufio.NewReader(os.Stdin).ReadBytes('\n')
-		case "9":
-			color.Blue.Println("\n👋 Thank you for using Clearance!")
-			os.Exit(0)
-		case "10":
-			showVersion()
-			color.Yellow.Println("Press Enter to continue...")
-			bufio.NewReader(os.Stdin).ReadBytes('\n')
-		default:
-			color.Red.Println("\n❌ Invalid option. Please try again.")
-			color.Yellow.Println("Press Enter to continue...")
-			bufio.NewReader(os.Stdin).ReadBytes('\n')
-		}
+	if err := rootCmd.Execute(); err != nil {
+		os.Exit(1)
 	}
 }
