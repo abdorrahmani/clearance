@@ -196,4 +196,4 @@ func (r *CacheReporter) GetCacheSizes() map[string]string {
 	}
 
 	return sizes
-} 
+}
