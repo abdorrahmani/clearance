@@ -11,11 +11,6 @@ import (
 	"github.com/gookit/color"
 )
 
-const clearanceLogo = `
-  C L E A R A N C E
-  =================
-`
-
 // UI handles all user interface interactions
 type UI struct {
 	reader *bufio.Reader
@@ -33,7 +28,9 @@ func (u *UI) ClearScreen() {
 	if runtime.GOOS == "windows" {
 		cmd := exec.Command("cmd", "/c", "cls")
 		cmd.Stdout = os.Stdout
-		cmd.Run()
+		if err := cmd.Run(); err != nil {
+			fmt.Println()
+		}
 	} else {
 		fmt.Print("\033[H\033[2J")
 	}
@@ -58,7 +55,7 @@ func (u *UI) ShowInstructions() {
 // ShowMenu displays the main menu with all options
 func (u *UI) ShowMenu() {
 	u.ClearScreen()
-	u.ShowHeader("0.1.0") // TODO: Make version configurable
+	u.ShowHeader("0.2.0")
 	u.ShowInstructions()
 
 	options := []struct {
@@ -119,7 +116,9 @@ func (u *UI) ShowAdminWarning() {
 	color.Yellow.Println("⚠️  This tool requires administrator privileges to clean system caches.")
 	color.Yellow.Println("Please run this tool as administrator.")
 	color.Yellow.Println("\nPress Enter to exit...")
-	u.reader.ReadBytes('\n')
+	if _, err := u.reader.ReadBytes('\n'); err != nil {
+		os.Exit(1)
+	}
 	os.Exit(1)
 }
 
@@ -168,7 +167,9 @@ func (u *UI) ReadInput() string {
 // WaitForEnter waits for the user to press Enter
 func (u *UI) WaitForEnter() {
 	color.Cyan.Print("\nPress Enter to continue...")
-	u.reader.ReadBytes('\n')
+	if _, err := u.reader.ReadBytes('\n'); err != nil {
+		fmt.Println()
+	}
 }
 
 // ShowCacheSizeReport displays the cache size report
