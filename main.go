@@ -15,14 +15,14 @@ import (
 	"github.com/spf13/cobra"
 )
 
-var (
-	version = "0.1.0"
-	commit  = "none"
-	date    = "2025-06-09"
-)
-
 func executeCleanup(ui *ui.UI, options []string) error {
 	ctx := context.Background()
+
+	// Handle exit option first
+	if len(options) == 1 && (options[0] == "8" || strings.ToLower(options[0]) == "exit") {
+		ui.ShowInfo("Goodbye! 👋")
+		os.Exit(0)
+	}
 
 	ui.ShowSelectedOptions(options)
 
@@ -55,7 +55,8 @@ func executeCleanup(ui *ui.UI, options []string) error {
 			ui.ShowCacheSizeReport(sizes)
 			return nil
 		case "8", "exit":
-			return nil
+			ui.ShowInfo("Goodbye! 👋")
+			os.Exit(0)
 		}
 	}
 
